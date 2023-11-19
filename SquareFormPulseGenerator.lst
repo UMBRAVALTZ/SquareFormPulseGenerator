@@ -1,0 +1,692 @@
+Microsoft (R) Macro Assembler Version 6.14.8444		    05/31/23 23:08:40
+SquareFormPulseGenerator.asm				     Page 1 - 1
+
+
+				.386
+				;Задайте объём ПЗУ в байтах
+ = 1000				RomSize    EQU   4096
+
+ = 00FB							MatrixPowerPortL = 0FBh; Матрицы 0-7
+ = 00F7							MatrixPowerPortH = 0F7h; Матрицы 8-15
+ = 00FE							MatrixColumnPort = 0FEh;
+ = 00FD							MatrixRowPort = 0FDh;
+ = 00EF							DisplayPowerPort = 0EFh ;0-2 Частота, 3 Амплитуда, 4 Длительность импульса
+ = 00DF							DisplaySegmentsPort = 0DFh
+ = 00FE							KeyboardPort = 0FEh
+ = 03E8							MS = 1000
+ = 0032							NMax = 50
+
+ 0000				IntTable   SEGMENT use16 AT 0
+				;Здесь размещаются адреса обработчиков прерываний
+ 0000				IntTable   ENDS
+
+ 0000				Data       SEGMENT use16 AT 40h
+				;Здесь размещаются описания переменных
+
+ 0000  0002 [						FrequancyBCD db 2 dup(?)
+        00
+       ]
+ 0002  0003 [						FrequancyImage db 3 dup(?)
+        00
+       ]
+
+ 0005 00						Frequancy db ?
+ 0006 00						Amplitude db ?
+ 0007 00						PulseDuration db ?
+ 0008 00						PauseDuration db ?
+ 0009 00						PulsePeriod db ?
+
+ 000A 00						NoInputErrorFlag db ?
+
+ 000B 00						PolarityFlag db ?
+
+ 000C  000A [						DataHexArr db 10 dup(?)
+        00
+       ]
+ 0016  000A [						DataHexTabl db 10 dup(?)
+        00
+       ]
+
+ 0020 00						KeyImage db ? ; FF: ничего, FE: + Freq, FD: - Freq, FB: + Ampl, F7: - Ampl, EF: + PulDur, DF: - PulDur, BF: Generation, 7F: Polarity
+ 0021 00						OldButton db ?
+
+ 0022  0080 [						PulsesImage db 128 dup(?)
+        00
+       ]
+
+ 00A2 00						PulsesCount db ?
+
+ 00A3 00						StartPosition db ?
+
+
+
+
+ 00A4				Data       ENDS
+
+				;Задайте необходимый адрес стека
+ 0000				Stack        SEGMENT use16 AT 2000h
+				;Задайте необходимый размер стека
+ 0000  0010 [			           dw    16 dup (?)
+        0000
+       ]
+ 0020				StackTop     Label Word
+ 0020				Stack        ENDS
+
+ 0000				InitData   SEGMENT use16
+ 0000				InitDataStart:
+				;Здесь размещаются описания констант
+
+
+
+ 0000				InitDataEnd:
+ 0000				InitData   ENDS
+
+ 0000				Code       SEGMENT use16
+				;Здесь размещаются описания констант
+
+							ASSUME cs:Code,ds:Data,es:Data
+ 0000 00 01 02 03 04 05					HexArr DB 00h,01h,02h,03h,04h,05h,06h,07h,08h,09h
+       06 07 08 09
+ 000A 3F 0C 76 5E 4D 5B					HexTabl DB 3Fh,0Ch,76h,5Eh,4Dh,5Bh,7Bh,0Eh,7Fh,5Fh
+       7B 0E 7F 5F
+							
+ 0014				Initialization PROC 
+ 0014  E8 00B8						CALL CopyArraysToDataSegment
+ 0017  33 C0						XOR AX, AX
+ 0019  C6 06 0005 R 14					MOV Frequancy, 20
+ 001E  88 26 0002 R					MOV FrequancyImage+0, AH
+ 0022  88 26 0003 R					MOV FrequancyImage+1, AH
+ 0026  88 26 0004 R					MOV FrequancyImage+2, AH
+ 002A  88 26 0000 R					MOV FrequancyBCD+0, AH
+ 002E  88 26 0001 R					MOV FrequancyBCD+1, AH
+ 0032  88 26 0002 R					MOV FrequancyBCD+2, AH
+ 0036  C6 06 0006 R 05					MOV Amplitude, 5; Амплитуда = 0
+ 003B  C6 06 0007 R 05					MOV PulseDuration, 5
+ 0040  88 26 0009 R					MOV PulsePeriod, AH
+ 0044  C6 06 000A R FF					MOV NoInputErrorFlag, 0FFh
+ 0049  88 26 0021 R					MOV OldButton, AH
+ 004D  C6 06 0020 R FF					MOV KeyImage, 0FFh
+ 0052  88 26 00A2 R					MOV PulsesCount, AH
+ 0056  88 26 000B R					MOV PolarityFlag, AH
+ 005A  8D 3E 0022 R					LEA DI, PulsesImage
+ 005E  B9 0080						MOV CX, 128
+ 0061  88 05			M1:			MOV [DI], AL
+ 0063  47						INC DI
+ 0064  E2 FB						LOOP M1
+							
+ 0066  C3						RET
+ 0067				Initialization ENDP
+
+ 0067				Delay PROC NEAR
+
+ 0067				Delay ENDP
+						   
+ 0067				DisplayFrequancy     PROC  ;Вывод частоты на дисплей
+ 0067  8D 1E 0016 R					LEA BX, DataHexTabl 
+ 006B  8A 26 0002 R		            MOV AH, FrequancyImage+0
+ 006F  8A C4			            MOV AL, AH               ;теперь в al старшая цифра
+ 0071  D7			            XLAT
+ 0072  F6 D0					    NOT AL		   ;табличное преобразование старшей цифры
+ 0074  E6 DF			            OUT DisplaySegmentsPort, AL    ;выводим на страший индикатор
+ 0076  B0 01			            MOV AL, 1            
+ 0078  E6 EF			            OUT DisplayPowerPort, AL    ;зажигаем старший индикатор    
+ 007A  B0 00			            MOV AL,00h             
+ 007C  E6 EF			            OUT DisplayPowerPort, AL    ;гасим индикатор
+ 007E  8A 26 0003 R				    MOV AH, FrequancyImage+1      ;загружаем в регистры
+ 0082  8A C4			            MOV AL, AH              ;текущее значение суммы                 
+ 0084  D7			            XLAT
+ 0085  F6 D0					    NOT AL ;табличное преобразование младшей цифры
+ 0087  E6 DF			            OUT DisplaySegmentsPort, AL    ;Выводим на младший индикатор            
+ 0089  B0 02			            MOV AL, 2            
+ 008B  E6 EF			            OUT DisplayPowerPort, AL    ;зажигаем младший индикатор
+ 008D  B0 00			            MOV AL,00h
+ 008F  E6 EF			            OUT DisplayPowerPort, AL    ;гасим индикатор
+ 0091  8A 26 0004 R					MOV AH, FrequancyImage+2      ;загружаем в регистры
+ 0095  8A C4			            MOV AL, AH              ;текущее значение суммы                 
+ 0097  D7			            XLAT
+ 0098  F6 D0					    NOT AL ;табличное преобразование младшей цифры
+ 009A  E6 DF			            OUT DisplaySegmentsPort, AL    ;Выводим на младший индикатор            
+ 009C  B0 04			            MOV AL, 4            
+ 009E  E6 EF			            OUT DisplayPowerPort, AL    ;зажигаем младший индикатор
+ 00A0  B0 00			            MOV AL,00h
+ 00A2  E6 EF			            OUT DisplayPowerPort, AL    ;гасим индикатор
+ 00A4  C3			            RET
+ 00A5				DisplayFrequancy     ENDP
+
+ 00A5				DisplayAmplitude     PROC  ;Вывод амплитуды на дисплей
+ 00A5  8D 1E 0016 R					LEA BX, DataHexTabl 
+ 00A9  A0 0006 R		            MOV AL, Amplitude
+ 00AC  D7			            XLAT
+ 00AD  F6 D0					    NOT AL		   ;табличное преобразование старшей цифры
+ 00AF  E6 DF			            OUT DisplaySegmentsPort, AL    ;выводим на страший индикатор
+ 00B1  B0 08			            MOV AL, 8            
+ 00B3  E6 EF			            OUT DisplayPowerPort, AL    ;зажигаем старший индикатор    
+ 00B5  B0 00			            MOV AL,00h             
+ 00B7  E6 EF			            OUT DisplayPowerPort, AL    ;гасим индикатор
+ 00B9  C3			            RET
+ 00BA				DisplayAmplitude     ENDP
+
+ 00BA				DisplayPulseDuration     PROC  ;Вывод длительности импульса на дисплей
+ 00BA  8D 1E 0016 R					LEA BX, DataHexTabl 
+ 00BE  A0 0007 R		            MOV AL, PulseDuration
+ 00C1  D7			            XLAT
+ 00C2  F6 D0					    NOT AL		   ;табличное преобразование старшей цифры
+ 00C4  E6 DF			            OUT DisplaySegmentsPort, AL    ;выводим на страший индикатор
+ 00C6  B0 10			            MOV AL, 16            
+ 00C8  E6 EF			            OUT DisplayPowerPort, AL    ;зажигаем старший индикатор    
+ 00CA  B0 00			            MOV AL,00h             
+ 00CC  E6 EF			            OUT DisplayPowerPort, AL    ;гасим индикатор
+ 00CE  C3			            RET
+ 00CF				DisplayPulseDuration     ENDP
+
+ 00CF				CopyArraysToDataSegment PROC 
+ 00CF  B9 000A						MOV CX, 10 ;Загрузка счётчика циклов
+ 00D2  8D 1E 0000 R					LEA BX, HexArr ;Загрузка адреса массива цифр
+ 00D6  8D 2E 000A R					LEA BP, HexTabl ;Загрузка адреса таблицы преобразования
+ 00DA  8D 3E 000C R					LEA DI, DataHexArr ;Загрузка адреса массива цифр в сегменте данных
+ 00DE  8D 36 0016 R					LEA SI, DataHexTabl ;Загрузка адреса таблицы преобразования в сегменте данных
+ 00E2				M0:
+ 00E2  2E: 8A 07					MOV AL, CS:[BX] ;Чтение цифры из массива в аккумулятор
+ 00E5  88 05						MOV [DI], AL ;Запись цифры в сегмент данных/DataHexArr
+ 00E7  43						INC BX ;Модификация адреса HexArr
+ 00E8  47						INC DI ;Модификация адреса DataHexArr
+ 00E9  E2 F7						LOOP M0
+							
+ 00EB  B9 000A						MOV CX, 10 ;Загрузка счётчика циклов
+ 00EE				M1:
+ 00EE  2E: 8A 66 00					MOV AH, CS:[BP] ;Чтение графического образа из таблицы преобразования
+ 00F2  88 24						MOV [SI], AH ;Запись графического образа в сегмент данных/DataHexTabl
+ 00F4  45						INC BP ;Модификация адреса HexTabl
+ 00F5  46						INC SI ;Модификация адреса DataHexTabl
+ 00F6  E2 F6						LOOP M1
+ 00F8  33 ED						XOR BP,BP
+ 00FA  C3						RET
+ 00FB				CopyArraysToDataSegment ENDP
+
+ 00FB				PulsePeriodAndPauseCalculation PROC  
+ 00FB  B8 03E8						MOV AX, MS
+ 00FE  F6 36 0005 R					DIV Frequancy
+ 0102  A2 0009 R					MOV PulsePeriod, AL
+ 0105  2A 06 0007 R					SUB AL, PulseDuration
+ 0109  A2 0008 R					MOV PauseDuration, AL
+ 010C  C3						RET
+ 010D				PulsePeriodAndPauseCalculation ENDP
+
+ 010D				PulsesCountCalculation PROC 
+ 010D  33 C0						XOR AX, AX
+ 010F  B0 80						MOV AL, LENGTH PulsesImage
+ 0111  F6 36 0009 R					DIV PulsePeriod
+ 0115  A2 00A2 R					MOV PulsesCount, AL
+ 0118  C3						RET
+ 0119				PulsesCountCalculation ENDP
+
+ 0119				FrequancyAddition PROC 
+ 0119  80 3E 0020 R FE					CMP KeyImage, 0FEh
+ 011E  75 0C						JNZ M1
+ 0120  80 3E 0005 R 96					CMP Frequancy, 150
+ 0125  74 05						JZ M1
+ 0127  80 06 0005 R 0A					ADD Frequancy, 10			
+ 012C  C3			M1:			RET
+ 012D				FrequancyAddition ENDP
+
+ 012D				FrequancySubtraction PROC 
+ 012D  80 3E 0020 R FD					CMP KeyImage, 0FDh
+ 0132  75 0C						JNZ M1
+ 0134  80 3E 0005 R 14					CMP Frequancy, 20
+ 0139  74 05						JZ M1
+ 013B  80 2E 0005 R 0A					SUB Frequancy, 10			
+ 0140  C3			M1:			RET
+ 0141				FrequancySubtraction ENDP
+
+ 0141				AmplitudeAddition PROC 
+ 0141  80 3E 0020 R FB					CMP KeyImage, 0FBh
+ 0146  75 0B						JNZ M1
+ 0148  80 3E 0006 R 05					CMP Amplitude, 5
+ 014D  74 04						JZ M1		
+ 014F  FE 06 0006 R					INC Amplitude			
+ 0153  C3			M1:			RET
+ 0154				AmplitudeAddition ENDP
+
+ 0154				AmplitudeSubtraction PROC 
+ 0154  80 3E 0020 R F7					CMP KeyImage, 0F7h
+ 0159  75 0B						JNZ M1
+ 015B  80 3E 0006 R 00					CMP Amplitude, 0
+ 0160  74 04						JZ M1			
+ 0162  FE 0E 0006 R					DEC Amplitude		
+ 0166  C3			M1:			RET
+ 0167				AmplitudeSubtraction ENDP
+
+ 0167				PulseDurationAddition PROC 
+ 0167  80 3E 0020 R EF					CMP KeyImage, 0EFh
+ 016C  75 0B						JNZ M1
+ 016E  80 3E 0007 R 05					CMP PulseDuration, 5
+ 0173  74 04						JZ M1
+ 0175  FE 06 0007 R					INC PulseDuration			
+ 0179  C3			M1:			RET
+ 017A				PulseDurationAddition ENDP
+
+ 017A				PulseDurationSubtraction PROC 
+ 017A  80 3E 0020 R DF					CMP KeyImage, 0DFh
+ 017F  75 0B						JNZ M1
+ 0181  80 3E 0007 R 01					CMP PulseDuration, 1
+ 0186  74 04						JZ M1
+ 0188  FE 0E 0007 R					DEC PulseDuration			
+ 018C  C3			M1:			RET
+ 018D				PulseDurationSubtraction ENDP
+
+ 018D				BinaryToBCD PROC 
+ 018D  33 DB						XOR BX, BX
+ 018F  88 1E 0000 R					MOV FrequancyBCD+0, BL
+ 0193  88 1E 0001 R					MOV FrequancyBCD+1, BL
+ 0197  88 1E 0002 R					MOV FrequancyBCD+2, BL
+ 019B  8A 1E 0005 R					MOV BL, Frequancy
+ 019F  B9 0008						MOV CX, 8
+ 01A2  8D 3E 0000 R		M2:			LEA DI, FrequancyBCD
+ 01A6  D0 E3						SHL BL, 1
+ 01A8  51						PUSH CX
+ 01A9  B9 0002						MOV CX, 2
+ 01AC  8A 05			M1:			MOV AL, [DI]
+ 01AE  12 05						ADC AL, [DI]
+ 01B0  27						DAA
+ 01B1  88 05						MOV [DI], AL
+ 01B3  47						INC DI
+ 01B4  E2 F6						LOOP M1
+ 01B6  59						POP CX
+ 01B7  E2 E9						LOOP M2
+ 01B9  C3						RET
+ 01BA				BinaryToBCD ENDP
+
+ 01BA				UnpackFrequancyBCD PROC 
+ 01BA  A0 0000 R					MOV AL, FrequancyBCD+0
+ 01BD  8A D8						MOV BL, AL
+ 01BF  24 0F						AND AL, 0Fh
+ 01C1  A2 0002 R					MOV FrequancyImage+0, AL
+ 01C4  C0 EB 04						SHR BL,4
+ 01C7  88 1E 0003 R					MOV FrequancyImage+1, BL
+ 01CB  A0 0001 R					MOV AL, FrequancyBCD+1
+ 01CE  24 0F						AND AL, 0Fh
+ 01D0  A2 0004 R					MOV FrequancyImage+2, AL
+ 01D3  C3						RET
+ 01D4				UnpackFrequancyBCD ENDP
+
+ 01D4				KeyRead    PROC   ;Чтение кнопок
+ 01D4  BA 00FE						MOV DX, KeyboardPort
+ 01D7  E4 FE			            IN AL, KeyboardPort
+ 01D9  E8 0026						CALL VibrDestr
+ 01DC  8A E0			            MOV AH, AL
+ 01DE  32 06 0021 R		            XOR AL, OldButton
+ 01E2  22 C4			            AND AL, AH
+ 01E4  F6 D0						NOT AL
+ 01E6  88 26 0021 R					MOV OldButton, AH
+ 01EA  A2 0020 R					MOV KeyImage, AL
+				            
+										
+ 01ED  C3						RET
+ 01EE				KeyRead    ENDP
+
+ 01EE				KeyCheck PROC 
+ 01EE  80 3E 0020 R FF					CMP KeyImage, 0FFh
+ 01F3  75 07						JNZ M1
+ 01F5  C6 06 000A R FF					MOV NoInputErrorFlag, 0FFh
+ 01FA  EB 05						JMP M2
+ 01FC  C6 06 000A R 00		M1:			MOV NoInputErrorFlag, 00h
+ 0201  C3			M2:			RET
+ 0202				KeyCheck ENDP
+
+ 0202				VibrDestr  PROC  
+ 0202  8A E0			VD1:        mov   ah,al       ;Сохранение исходного состояния
+ 0204  B7 00			            mov   bh,0        ;Сброс счётчика повторений
+ 0206  EC			VD2:        in    al,dx       ;Ввод текущего состояния
+ 0207  38 C4			            cmp   ah,al       ;Текущее состояние=исходному?
+ 0209  75 F7			            jne   VD1         ;Переход, если нет
+ 020B  FE C7			            inc   bh          ;Инкремент счётчика повторений
+ 020D  80 FF 32			            cmp   bh,NMax     ;Конец дребезга?
+ 0210  75 F4			            jne   VD2         ;Переход, если нет
+ 0212  8A C4			            mov   al,ah       ;Восстановление местоположения данных
+ 0214  C3			            ret
+ 0215				VibrDestr  ENDP
+
+ 0215				PolaritySetting PROC 
+ 0215  80 3E 0020 R BF					CMP KeyImage, 0BFh
+ 021A  75 04						JNZ M1
+ 021C  F6 16 000B R					NOT PolarityFlag
+ 0220  C3			M1:			RET
+ 0221				PolaritySetting ENDP
+
+ 0221				DataSetting PROC 
+ 0221  80 3E 000A R FF					CMP NoInputErrorFlag, 0FFh
+ 0226  74 1E						JZ M1
+ 0228  E8 FEEE						CALL FrequancyAddition
+ 022B  E8 FEFF						CALL FrequancySubtraction
+ 022E  E8 FF10						CALL AmplitudeAddition
+ 0231  E8 FF20						CALL AmplitudeSubtraction
+ 0234  E8 FF30						CALL PulseDurationAddition
+ 0237  E8 FF40						CALL PulseDurationSubtraction
+ 023A  E8 FFD8						CALL PolaritySetting
+ 023D  E8 FEBB						CALL PulsePeriodAndPauseCalculation
+ 0240  E8 FECA						CALL PulsesCountCalculation
+ 0243  E8 00FB						CALL StartPositionSetting
+ 0246				M1:			
+ 0246  C3						RET
+ 0247				DataSetting ENDP
+
+ 0247				PulseImageForming PROC 
+ 0247  8D 1E 0022 R					LEA BX, PulsesImage
+ 024B  33 FF						XOR DI, DI
+							
+ 024D  E8 0020						CALL XAxisForming
+							
+ 0250  80 3E 0006 R 00					CMP Amplitude, 00h
+ 0255  74 18						JZ M2
+ 0257  33 FF						XOR DI, DI
+							
+ 0259  8A 0E 00A2 R					MOV CL, PulsesCount
+ 025D  FE C1						INC CL
+							
+ 025F  51			M1:			PUSH CX
+
+ 0260  E8 003E						CALL AmplitudeUpImageForming
+ 0263  E8 005B						CALL PulseDurationImageForming
+ 0266  E8 0071						CALL AmplitudeDownImageForming
+ 0269  E8 008A						CALL PauseDurationImageForming
+							
+ 026C  59						POP CX
+ 026D  E2 F0						LOOP M1
+ 026F  C3			M2:			RET
+ 0270				PulseImageForming ENDP
+
+ 0270				XAxisForming PROC 
+
+ 0270  B1 80						MOV CL, 128
+ 0272  8A 26 00A3 R					MOV AH, StartPosition
+ 0276  8A C4						MOV AL, AH
+							
+ 0278  80 3E 000B R FF					CMP PolarityFlag, 0FFh
+ 027D  75 0E						JNZ M1
+ 027F  C0 EC 02						SHR AH, 2
+ 0282  80 3E 0006 R 00					CMP Amplitude, 00h
+ 0287  75 10						JNZ M2
+ 0289  0A E0						OR AH, AL
+ 028B  EB 0C						JMP M2
+							
+ 028D  C0 E4 02			M1:			SHL AH, 2
+ 0290  80 3E 0006 R 00					CMP Amplitude, 00h
+ 0295  75 02						JNZ M2
+ 0297  0A E0						OR AH, AL
+
+ 0299  08 21			M2:			OR [BX+DI], AH
+ 029B  20 21						AND [BX+DI], AH
+ 029D  47						INC DI
+ 029E  E2 F9						LOOP M2
+
+ 02A0  C3						RET
+ 02A1				XAxisForming ENDP
+
+
+ 02A1				AmplitudeUpImageForming PROC 
+ 02A1  8A 0E 0006 R					MOV CL, Amplitude
+ 02A5  8A 26 00A3 R					MOV AH, StartPosition
+ 02A9  81 FF 0080		M1:			CMP DI, 128
+ 02AD  74 11						JZ M7
+ 02AF  08 21						OR [BX+DI], AH
+ 02B1  80 3E 000B R 00					CMP PolarityFlag, 00h
+ 02B6  75 04						JNZ M2
+ 02B8  D0 EC						SHR AH, 1
+ 02BA  EB 02						JMP M3
+ 02BC  D0 E4			M2:			SHL AH, 1
+							
+ 02BE  E2 E9			M3:			LOOP M1
+ 02C0  C3			M7:			RET
+ 02C1				AmplitudeUpImageForming ENDP
+
+ 02C1				PulseDurationImageForming PROC 
+ 02C1  80 3E 0007 R 01					CMP PulseDuration, 1
+ 02C6  74 11						JZ M7
+ 02C8  8A 0E 0007 R					MOV CL, PulseDuration; Длительность импульса - 1
+ 02CC  FE C9						DEC CL
+ 02CE  81 FF 0080		M2:			CMP DI, 128
+ 02D2  74 05						JZ M7
+ 02D4  08 21						OR [BX+DI], AH
+ 02D6  47						INC DI
+ 02D7  E2 F5						LOOP M2
+ 02D9  C3			M7:			RET
+ 02DA				PulseDurationImageForming ENDP
+
+ 02DA				AmplitudeDownImageForming PROC 
+ 02DA  8A 0E 0006 R					MOV CL, Amplitude
+ 02DE  81 FF 0080		M1:			CMP DI, 128
+ 02E2  74 11						JZ M7
+ 02E4  08 21						OR [BX+DI], AH
+ 02E6  80 3E 000B R 00					CMP PolarityFlag, 00h
+ 02EB  75 04						JNZ M2
+ 02ED  D0 E4						SHL AH, 1
+ 02EF  EB 02						JMP M3
+ 02F1  D0 EC			M2:			SHR AH, 1
+ 02F3  E2 E9			M3:			LOOP M1
+ 02F5  C3			M7:			RET
+ 02F6				AmplitudeDownImageForming ENDP
+
+ 02F6				PauseDurationImageForming PROC 
+ 02F6  8A 0E 0008 R					MOV CL, PauseDuration
+ 02FA  FE C1						INC CL
+ 02FC  81 FF 0080		M4:			CMP DI, 128
+ 0300  74 05						JZ M7
+ 0302  08 21						OR [BX+DI], AH
+ 0304  47						INC DI
+ 0305  E2 F5						LOOP M4
+ 0307  C3			M7:			RET
+ 0308				PauseDurationImageForming ENDP
+
+ 0308				MatrixOutput PROC 
+ 0308  8D 36 0022 R					LEA SI, PulsesImage
+ 030C  B2 FB						MOV DL, MatrixPowerPortL
+ 030E  B3 01						MOV BL, 1
+ 0310  B4 01						MOV AH, 1
+ 0312  B9 0002						MOV CX, 2
+ 0315  51			M3:			PUSH CX
+							
+ 0316  B9 0008						MOV CX, 8
+							
+ 0319  51			M2:			PUSH CX
+ 031A  8A C3						MOV AL, BL
+ 031C  EE						OUT DX, AL
+							
+ 031D  B9 0008						MOV CX, 8
+							
+ 0320  8A 04			M1:			MOV AL, [SI]
+ 0322  E6 FD						OUT MatrixRowPort, AL
+ 0324  8A C4						MOV AL, AH
+ 0326  E6 FE						OUT MatrixColumnPort, AL
+ 0328  B0 00						MOV AL, 0
+ 032A  E6 FD						OUT MatrixRowPort, AL
+ 032C  E6 FE						OUT MatrixColumnPort, AL
+ 032E  D0 C4						ROL AH, 1
+ 0330  46						INC SI
+ 0331  E2 ED						LOOP M1
+ 0333  B0 00						MOV AL, 0
+ 0335  EE						OUT DX, AL 
+ 0336  D0 C3						ROL BL, 1
+ 0338  59						POP CX
+ 0339  E2 DE						LOOP M2
+							
+ 033B  59						POP CX
+ 033C  D0 C2						ROL DL, 1
+ 033E  E2 D5						LOOP M3
+ 0340  C3						RET
+ 0341				MatrixOutput ENDP
+
+ 0341				StartPositionSetting PROC 
+ 0341  80 3E 000B R 00					CMP PolarityFlag, 00h
+ 0346  75 07						JNZ M1
+ 0348  C6 06 00A3 R 20					MOV StartPosition, 20h
+ 034D  EB 05						JMP M2
+ 034F  C6 06 00A3 R 04		M1:			MOV StartPosition, 04h
+ 0354				M2:			
+ 0354  C3						RET
+ 0355				StartPositionSetting ENDP
+
+ 0355				DisplayData PROC 
+ 0355  E8 FD0F						CALL DisplayFrequancy
+ 0358  E8 FD4A						CALL DisplayAmplitude
+ 035B  E8 FD5C						CALL DisplayPulseDuration
+ 035E  C3						RET
+ 035F				DisplayData ENDP
+
+ 035F				Start:
+ 035F  B8 ---- R		            mov   ax,Data
+ 0362  8E D8			            mov   ds,ax
+ 0364  8E C0			            mov   es,ax
+ 0366  B8 ---- R		            mov   ax,Stack
+ 0369  8E D0			            mov   ss,ax
+ 036B  8D 26 0020 R		            lea   sp,StackTop
+							
+				;Здесь размещается код программы
+ 036F  E8 FCA2						CALL Initialization
+ 0372				ILOOP:
+ 0372  E8 FE5F						CALL KeyRead
+ 0375  E8 FE76						CALL KeyCheck
+ 0378  E8 FEA6						CALL DataSetting
+ 037B  E8 FE0F						CALL BinaryToBCD
+ 037E  E8 FE39						CALL UnpackFrequancyBCD		
+ 0381  E8 FFD1						CALL DisplayData
+ 0384  E8 FEC0						CALL PulseImageForming
+ 0387  E8 FF7E						CALL MatrixOutput
+ 038A  EB E6						JMP ILOOP
+
+				;В следующей строке необходимо указать смещение стартовой точки
+				           org   RomSize-16-((InitDataEnd-InitDataStart+15) AND 0FFF0h)
+				           ASSUME cs:NOTHING
+ 0FF0  EA ---- 035F R		           jmp   Far Ptr Start
+ 0FF5				Code       ENDS
+				END		Start
+Microsoft (R) Macro Assembler Version 6.14.8444		    05/31/23 23:08:40
+SquareFormPulseGenerator.asm				     Symbols 2 - 1
+
+
+
+
+Segments and Groups:
+
+                N a m e                 Size     Length   Align   Combine Class
+
+Code . . . . . . . . . . . . . .	16 Bit	 0FF5	  Para	  Private 
+Data . . . . . . . . . . . . . .	16 Bit	 00A4	  Abs	  Private 
+InitData . . . . . . . . . . . .	16 Bit	 0000	  Para	  Private 
+IntTable . . . . . . . . . . . .	16 Bit	 0000	  Abs	  Private 
+Stack  . . . . . . . . . . . . .	16 Bit	 0020	  Abs	  Private 
+
+
+Procedures,  parameters and locals:
+
+                N a m e                 Type     Value    Attr
+
+AmplitudeAddition  . . . . . . .	P Near	 0141	  Code	Length= 0013 Public
+  M1 . . . . . . . . . . . . . .	L Near	 0153	  Code	
+AmplitudeDownImageForming  . . .	P Near	 02DA	  Code	Length= 001C Public
+  M1 . . . . . . . . . . . . . .	L Near	 02DE	  Code	
+  M2 . . . . . . . . . . . . . .	L Near	 02F1	  Code	
+  M3 . . . . . . . . . . . . . .	L Near	 02F3	  Code	
+  M7 . . . . . . . . . . . . . .	L Near	 02F5	  Code	
+AmplitudeSubtraction . . . . . .	P Near	 0154	  Code	Length= 0013 Public
+  M1 . . . . . . . . . . . . . .	L Near	 0166	  Code	
+AmplitudeUpImageForming  . . . .	P Near	 02A1	  Code	Length= 0020 Public
+  M1 . . . . . . . . . . . . . .	L Near	 02A9	  Code	
+  M2 . . . . . . . . . . . . . .	L Near	 02BC	  Code	
+  M3 . . . . . . . . . . . . . .	L Near	 02BE	  Code	
+  M7 . . . . . . . . . . . . . .	L Near	 02C0	  Code	
+BinaryToBCD  . . . . . . . . . .	P Near	 018D	  Code	Length= 002D Public
+  M2 . . . . . . . . . . . . . .	L Near	 01A2	  Code	
+  M1 . . . . . . . . . . . . . .	L Near	 01AC	  Code	
+CopyArraysToDataSegment  . . . .	P Near	 00CF	  Code	Length= 002C Public
+  M0 . . . . . . . . . . . . . .	L Near	 00E2	  Code	
+  M1 . . . . . . . . . . . . . .	L Near	 00EE	  Code	
+DataSetting  . . . . . . . . . .	P Near	 0221	  Code	Length= 0026 Public
+  M1 . . . . . . . . . . . . . .	L Near	 0246	  Code	
+Delay  . . . . . . . . . . . . .	P Near	 0067	  Code	Length= 0000 Public
+DisplayAmplitude . . . . . . . .	P Near	 00A5	  Code	Length= 0015 Public
+DisplayData  . . . . . . . . . .	P Near	 0355	  Code	Length= 000A Public
+DisplayFrequancy . . . . . . . .	P Near	 0067	  Code	Length= 003E Public
+DisplayPulseDuration . . . . . .	P Near	 00BA	  Code	Length= 0015 Public
+FrequancyAddition  . . . . . . .	P Near	 0119	  Code	Length= 0014 Public
+  M1 . . . . . . . . . . . . . .	L Near	 012C	  Code	
+FrequancySubtraction . . . . . .	P Near	 012D	  Code	Length= 0014 Public
+  M1 . . . . . . . . . . . . . .	L Near	 0140	  Code	
+Initialization . . . . . . . . .	P Near	 0014	  Code	Length= 0053 Public
+  M1 . . . . . . . . . . . . . .	L Near	 0061	  Code	
+KeyCheck . . . . . . . . . . . .	P Near	 01EE	  Code	Length= 0014 Public
+  M1 . . . . . . . . . . . . . .	L Near	 01FC	  Code	
+  M2 . . . . . . . . . . . . . .	L Near	 0201	  Code	
+KeyRead  . . . . . . . . . . . .	P Near	 01D4	  Code	Length= 001A Public
+MatrixOutput . . . . . . . . . .	P Near	 0308	  Code	Length= 0039 Public
+  M3 . . . . . . . . . . . . . .	L Near	 0315	  Code	
+  M2 . . . . . . . . . . . . . .	L Near	 0319	  Code	
+  M1 . . . . . . . . . . . . . .	L Near	 0320	  Code	
+PauseDurationImageForming  . . .	P Near	 02F6	  Code	Length= 0012 Public
+  M4 . . . . . . . . . . . . . .	L Near	 02FC	  Code	
+  M7 . . . . . . . . . . . . . .	L Near	 0307	  Code	
+PolaritySetting  . . . . . . . .	P Near	 0215	  Code	Length= 000C Public
+  M1 . . . . . . . . . . . . . .	L Near	 0220	  Code	
+PulseDurationAddition  . . . . .	P Near	 0167	  Code	Length= 0013 Public
+  M1 . . . . . . . . . . . . . .	L Near	 0179	  Code	
+PulseDurationImageForming  . . .	P Near	 02C1	  Code	Length= 0019 Public
+  M2 . . . . . . . . . . . . . .	L Near	 02CE	  Code	
+  M7 . . . . . . . . . . . . . .	L Near	 02D9	  Code	
+PulseDurationSubtraction . . . .	P Near	 017A	  Code	Length= 0013 Public
+  M1 . . . . . . . . . . . . . .	L Near	 018C	  Code	
+PulseImageForming  . . . . . . .	P Near	 0247	  Code	Length= 0029 Public
+  M1 . . . . . . . . . . . . . .	L Near	 025F	  Code	
+  M2 . . . . . . . . . . . . . .	L Near	 026F	  Code	
+PulsePeriodAndPauseCalculation .	P Near	 00FB	  Code	Length= 0012 Public
+PulsesCountCalculation . . . . .	P Near	 010D	  Code	Length= 000C Public
+StartPositionSetting . . . . . .	P Near	 0341	  Code	Length= 0014 Public
+  M1 . . . . . . . . . . . . . .	L Near	 034F	  Code	
+  M2 . . . . . . . . . . . . . .	L Near	 0354	  Code	
+UnpackFrequancyBCD . . . . . . .	P Near	 01BA	  Code	Length= 001A Public
+VibrDestr  . . . . . . . . . . .	P Near	 0202	  Code	Length= 0013 Public
+  VD1  . . . . . . . . . . . . .	L Near	 0202	  Code	
+  VD2  . . . . . . . . . . . . .	L Near	 0206	  Code	
+XAxisForming . . . . . . . . . .	P Near	 0270	  Code	Length= 0031 Public
+  M1 . . . . . . . . . . . . . .	L Near	 028D	  Code	
+  M2 . . . . . . . . . . . . . .	L Near	 0299	  Code	
+
+
+Symbols:
+
+                N a m e                 Type     Value    Attr
+
+Amplitude  . . . . . . . . . . .	Byte	 0006	  Data	
+DataHexArr . . . . . . . . . . .	Byte	 000C	  Data	
+DataHexTabl  . . . . . . . . . .	Byte	 0016	  Data	
+DisplayPowerPort . . . . . . . .	Number	 00EFh	 
+DisplaySegmentsPort  . . . . . .	Number	 00DFh	 
+FrequancyBCD . . . . . . . . . .	Byte	 0000	  Data	
+FrequancyImage . . . . . . . . .	Byte	 0002	  Data	
+Frequancy  . . . . . . . . . . .	Byte	 0005	  Data	
+HexArr . . . . . . . . . . . . .	Byte	 0000	  Code	
+HexTabl  . . . . . . . . . . . .	Byte	 000A	  Code	
+ILOOP  . . . . . . . . . . . . .	L Near	 0372	  Code	
+InitDataEnd  . . . . . . . . . .	L Near	 0000	  InitData	
+InitDataStart  . . . . . . . . .	L Near	 0000	  InitData	
+KeyImage . . . . . . . . . . . .	Byte	 0020	  Data	
+KeyboardPort . . . . . . . . . .	Number	 00FEh	 
+MS . . . . . . . . . . . . . . .	Number	 03E8h	 
+MatrixColumnPort . . . . . . . .	Number	 00FEh	 
+MatrixPowerPortH . . . . . . . .	Number	 00F7h	 
+MatrixPowerPortL . . . . . . . .	Number	 00FBh	 
+MatrixRowPort  . . . . . . . . .	Number	 00FDh	 
+NMax . . . . . . . . . . . . . .	Number	 0032h	 
+NoInputErrorFlag . . . . . . . .	Byte	 000A	  Data	
+OldButton  . . . . . . . . . . .	Byte	 0021	  Data	
+PauseDuration  . . . . . . . . .	Byte	 0008	  Data	
+PolarityFlag . . . . . . . . . .	Byte	 000B	  Data	
+PulseDuration  . . . . . . . . .	Byte	 0007	  Data	
+PulsePeriod  . . . . . . . . . .	Byte	 0009	  Data	
+PulsesCount  . . . . . . . . . .	Byte	 00A2	  Data	
+PulsesImage  . . . . . . . . . .	Byte	 0022	  Data	
+RomSize  . . . . . . . . . . . .	Number	 1000h	 
+StackTop . . . . . . . . . . . .	Word	 0020	  Stack	
+StartPosition  . . . . . . . . .	Byte	 00A3	  Data	
+Start  . . . . . . . . . . . . .	L Near	 035F	  Code	
+
+	   0 Warnings
+	   0 Errors

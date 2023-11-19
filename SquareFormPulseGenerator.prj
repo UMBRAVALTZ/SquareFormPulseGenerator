@@ -1,0 +1,6 @@
+[SOURCE]=00000001,SquareFormPulseGenerator.asm
+[ARCH]=00000000,SquareFormPulseGenerator.arh
+[ROMSIZE]=4
+[FREQ]=1000000
+[FREEPINLEVEL]=1
+[WND.arh]=(203,7,1807,685)D:\PROGRAMS\Design Microsystems\Examples\SquareFormPulseGenerator\SquareFormPulseGenerator.arh
